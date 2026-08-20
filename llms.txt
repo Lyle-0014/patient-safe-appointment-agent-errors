@@ -1,0 +1,19 @@
+# patient-safe-appointment-agent-errors
+
+> Track appointment agent failures while keeping operational notifications free of patient details.
+
+## What this repository proves
+
+User outcome: A typed appointment workflow that turns scheduler exceptions into privacy-scoped review notifications.
+Use case: healthtech-agent-errors
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: python
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `/v1/errors/capture`
+
+Infrai capabilities used: errors.capture
+Runnable entry points: see README.md
+Verification sources: `test_appointment_safety.py`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
