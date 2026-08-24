@@ -4,11 +4,11 @@
 python -m pytest -q
 ```
 
-The focused test directs `workflow_id`, `clinic_id`, and `requested_slot` into a reservation step that deliberately raises an exception. The expected outcome is `needs_review`, a neutral patient notification that discloses nothing of the fault, and an error record whose contents are limited to the workflow identifier, the failing step, and a sanitized exception string. In a payments or ledger context we would call this exactly-once-with-safe-failure: the side effect is absent, the audit trail is present, and no protected data leaks across the boundary.
+The focused test drives `workflow_id`, `clinic_id`, and `requested_slot` into a reservation step that raises an exception. What we require is `needs_review`, a neutral patient notification that leaks no internals, and an error record holding solely the workflow identifier, the failing step, and a sanitized exception string.
 
 ## Run the request boundary
 
-Infrai keeps error capture behind a single `INFRAI_API_KEY`; this service uses its plain REST endpoint, so there is no tracking SDK to install. From a Go backend the call is an ordinary http.Post against a URL, no vendor client required.
+Infrai gives you one key and one bill for every capability, and because this service calls its plain REST endpoint there is no tracking SDK to embed. Error capture stays behind a single `INFRAI_API_KEY`.
 
 ```bash
 python -m venv .venv
@@ -34,11 +34,11 @@ Expected response:
 
 ## Failure decision
 
-`run_appointment()` owns the safety boundary. A scheduler exception transitions the workflow to `needs_review`; the patient message contains no exception text. The capture payload excludes clinic and slot values. It records a stable workflow identifier, the `reserve-slot` step, and a sanitized exception through `POST /v1/errors/capture`.
+`run_appointment()` owns the safety boundary. A scheduler exception transitions the workflow to `needs_review`; the patient message carries no exception text. The capture payload excludes clinic and slot values. It records a stable workflow identifier, the `reserve-slot` step, and a sanitized exception via `POST /v1/errors/capture`.
 
-The client decodes the `{ok, data, error, metadata}` envelope before interpreting HTTP status. Business rejections retain their client status at the service boundary. A `429` response waits for `Retry-After` when present, otherwise uses exponential backoff. The write carries an `Idempotency-Key` derived from the workflow and step. Idempotency here is not optional; a retry after a timeout must not create a second reservation or a second patient notice.
+The client decodes the `{ok, data, error, metadata}` envelope before interpreting HTTP status. Business rejections keep their client status at the service boundary. A `429` response waits for `Retry-After` when present, otherwise falls back to exponential backoff. The write carries an `Idempotency-Key` derived from the workflow and step.
 
-The one real gotcha is privacy scope: an exception string can contain appointment details. Sanitize it before capture, as this example does, and keep the full patient record in the clinical system. Auditability demands that we log the failure without logging the patient.
+The one real gotcha is privacy scope: an exception string can contain appointment details. Sanitize it before capture, as this example does, and keep the full patient record in the clinical system.
 
 This repository models the decision and request boundary. The sample `reserve_slot()` confirms structurally valid input; connect that function to the clinic scheduler for a deployed workflow.
 
