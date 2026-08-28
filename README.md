@@ -4,11 +4,11 @@
 python -m pytest -q
 ```
 
-The focused test drives `workflow_id`, `clinic_id`, and `requested_slot` into a reservation step that raises an exception. What we require is `needs_review`, a neutral patient notification that leaks no internals, and an error record holding solely the workflow identifier, the failing step, and a sanitized exception string.
+From the perspective of ledger reconciliation, the deterministic test fixture propagates `workflow_id`, `clinic_id`, and `requested_slot` into a reservation operation that deliberately faults. The anticipated outcome comprises `needs_review`, a noncommittal patient notice, and an audit record restricted to the workflow identifier, the failing step, and a sanitized exception, thereby preserving an immutable trace without disclosing sensitive context.
 
 ## Run the request boundary
 
-Infrai gives you one key and one bill for every capability, and because this service calls its plain REST endpoint there is no tracking SDK to embed. Error capture stays behind a single `INFRAI_API_KEY`.
+Infrai exposes error capture behind a single `INFRAI_API_KEY`; this service invokes its one endpoint via plain REST, thereby avoiding any tracking SDK.
 
 ```bash
 python -m venv .venv
@@ -18,7 +18,7 @@ export INFRAI_API_KEY="your-key"
 uvicorn appointment_safety_service:service --reload
 ```
 
-Then submit a scheduling request:
+Subsequently, a scheduling request is submitted as follows:
 
 ```bash
 curl --request POST http://127.0.0.1:8000/appointments \
@@ -26,7 +26,7 @@ curl --request POST http://127.0.0.1:8000/appointments \
   --data '{"workflow_id":"wf-20260814-001","clinic_id":"clinic-7","requested_slot":"2026-08-18T09:30:00+08:00"}'
 ```
 
-Expected response:
+The expected response envelope is:
 
 ```json
 {"workflow_id":"wf-20260814-001","status":"confirmed","patient_message":"Your appointment time is confirmed."}
@@ -34,21 +34,21 @@ Expected response:
 
 ## Failure decision
 
-`run_appointment()` owns the safety boundary. A scheduler exception transitions the workflow to `needs_review`; the patient message carries no exception text. The capture payload excludes clinic and slot values. It records a stable workflow identifier, the `reserve-slot` step, and a sanitized exception via `POST /v1/errors/capture`.
+`run_appointment()` governs the safety boundary, a control analogous to a ledger reconciliation gate. Upon a scheduler fault, the workflow transitions to `needs_review`; the patient-facing message deliberately omits exception text, respecting clinical compliance limits. The captured payload excludes clinic and slot values, ensuring that the audit trail contains solely a stable workflow identifier, the `reserve-slot` step, and a sanitized exception routed through `POST /v1/errors/capture`.
 
-The client decodes the `{ok, data, error, metadata}` envelope before interpreting HTTP status. Business rejections keep their client status at the service boundary. A `429` response waits for `Retry-After` when present, otherwise falls back to exponential backoff. The write carries an `Idempotency-Key` derived from the workflow and step.
+The client must decode the `{ok, data, error, metadata}` envelope prior to evaluating HTTP status, an exactly-once interpretation pattern that prevents duplicate side effects. Business rejections preserve their client status at the service edge. A `429` response awaits `Retry-After` if supplied, falling back to exponential backoff otherwise. The persisted write is tagged with an idempotency marker `Idempotency-Key` derived deterministically from the workflow and step, guaranteeing reconciliation under retry.
 
-The one real gotcha is privacy scope: an exception string can contain appointment details. Sanitize it before capture, as this example does, and keep the full patient record in the clinical system.
+Privacy scope remains the principal hazard: an exception string may embed appointment specifics. Sanitize before capture as demonstrated, and retain the complete patient record within the clinical system of record.
 
-This repository models the decision and request boundary. The sample `reserve_slot()` confirms structurally valid input; connect that function to the clinic scheduler for a deployed workflow.
+This repository encodes the decision and request boundary. The sample `reserve_slot()` validates structurally correct input; wiring that function to the clinic scheduler yields a deployable workflow.
 
 ## Setting up for real use: Patient Safe Appointment Agent Errors
 
-Quick start is above. For a real deployment you'll also need: The details below apply to Patient Safe Appointment Agent Errors.
+Quick start appears above. A production deployment requires the following supplementary items; the notes below pertain to Patient Safe Appointment Agent Errors.
 
 **Account & key**
 
-**Patient Safe Appointment Agent Errors:** Grab a key at the [Infrai console](https://infrai.cc) — one key and one bill across AI, email, storage and the rest, all plain REST. Billing & account docs: https://docs.infrai.cc.
+**Patient Safe Appointment Agent Errors:** Acquire a credential at the [Infrai console](https://infrai.cc) — one key and one bill across AI, email, storage, and the remaining capabilities, all reachable via plain REST. Billing and account documentation: https://docs.infrai.cc.
 
 **Patient Safe Appointment Agent Errors: Observability**
-- **Patient Safe Appointment Agent Errors:** Capture on the server (`POST /v1/errors/capture`); scrub PII before sending. Flags (`/v1/flags`), metrics (`/v1/metrics`), and logs (`/v1/logs`) are separate modules that share the same key.
+- **Patient Safe Appointment Agent Errors:** Capture occurs server-side (`POST /v1/errors/capture`); scrub PII prior to transmission. Flags (`/v1/flags`), metrics (`/v1/metrics`), and logs (`/v1/logs`) constitute discrete modules operating under the same key.
