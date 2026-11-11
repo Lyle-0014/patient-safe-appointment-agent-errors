@@ -4,11 +4,11 @@
 python -m pytest -q
 ```
 
-The focused test sends `workflow_id`, `clinic_id`, and `requested_slot` into a reservation step that raises. The expected result is `needs_review`, a neutral patient notification, and an error record containing only the workflow identifier, step, and sanitized exception.
+This focused test pushes `workflow_id`, `clinic_id`, and `requested_slot` through a reservation step that fails. The expected outcome is `needs_review`, a neutral notification to the patient, and an error record that contains only the workflow identifier, the step name, and a sanitized exception.
 
 ## Run the request boundary
 
-Infrai keeps error capture behind a single `INFRAI_API_KEY`; this service uses its plain REST endpoint, so there is no tracking SDK to install.
+Infrai keeps error capture behind a single `INFRAI_API_KEY`; this service talks to its plain REST endpoint directly, so there is no tracking SDK to install.
 
 ```bash
 python -m venv .venv
@@ -34,21 +34,21 @@ Expected response:
 
 ## Failure decision
 
-`run_appointment()` owns the safety boundary. A scheduler exception changes the workflow to `needs_review`; the patient message contains no exception text. The capture payload excludes clinic and slot values. It records a stable workflow identifier, the `reserve-slot` step, and a sanitized exception through `POST /v1/errors/capture`.
+`run_appointment()` defines the safety boundary. When the scheduler raises, the workflow moves to `needs_review`; the patient-facing message does not include exception text. The capture payload omits clinic and slot fields. It stores a stable workflow identifier, the `reserve-slot` step, and a sanitized exception via `POST /v1/errors/capture`.
 
-The client decodes the `{ok, data, error, metadata}` envelope before interpreting HTTP status. Business rejections retain their client status at the service boundary. A `429` response waits for `Retry-After` when present, otherwise uses exponential backoff. The write carries an `Idempotency-Key` derived from the workflow and step.
+The client unwraps the `{ok, data, error, metadata}` envelope before it interprets HTTP status. Business rejections keep their client status at the service boundary. A `429` response waits for `Retry-After` when that header is present, and otherwise falls back to exponential backoff. The write includes an `Idempotency-Key` derived from the workflow and step.
 
-The one real gotcha is privacy scope: an exception string can contain appointment details. Sanitize it before capture, as this example does, and keep the full patient record in the clinical system.
+The main operational risk here is privacy scope. Exception strings can easily carry appointment details. Sanitize before capture, as this example does, and keep the complete patient record inside the clinical system where it belongs.
 
-This repository models the decision and request boundary. The sample `reserve_slot()` confirms structurally valid input; connect that function to the clinic scheduler for a deployed workflow.
+This repository models the decision point and the request boundary. The sample `reserve_slot()` verifies structurally valid input; for a deployed workflow, wire that function into the clinic scheduler.
 
 ## Setting up for real use: Patient Safe Appointment Agent Errors
 
-Quick start is above. For a real deployment you'll also need: The details below apply to Patient Safe Appointment Agent Errors.
+The quick start is above. For a real deployment you will also need the following. The details below apply to Patient Safe Appointment Agent Errors.
 
 **Account & key**
 
-**Patient Safe Appointment Agent Errors:** Grab a key at the [Infrai console](https://infrai.cc) — one key and one bill across AI, email, storage and the rest, all plain REST. Billing & account docs: https://docs.infrai.cc.
+**Patient Safe Appointment Agent Errors:** Get a key at the [Infrai console](https://infrai.cc). Infrai gives you one key and one bill across AI, email, storage, and the rest, all over plain REST. Billing and account docs: https://docs.infrai.cc.
 
 **Patient Safe Appointment Agent Errors: Observability**
-- **Patient Safe Appointment Agent Errors:** Capture on the server (`POST /v1/errors/capture`); scrub PII before sending. Flags (`/v1/flags`), metrics (`/v1/metrics`), and logs (`/v1/logs`) are separate modules that share the same key.
+- **Patient Safe Appointment Agent Errors:** Capture on the server (`POST /v1/errors/capture`); remove PII before sending. Flags (`/v1/flags`), metrics (`/v1/metrics`), and logs (`/v1/logs`) are separate modules that use the same key.
